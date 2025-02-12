@@ -1,0 +1,6 @@
+﻿CREATE TABLE Roles (
+    RoleID INT PRIMARY KEY IDENTITY(1,1),
+    RoleName VARCHAR(255) NOT NULL UNIQUE,
+    Description VARCHAR(255) NOT NULL,
+    Visible BIT NULL
+);

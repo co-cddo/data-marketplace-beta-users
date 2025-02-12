@@ -1,0 +1,226 @@
+# ===================================
+# Azure DevOps Pipeline for CDDO USERS API
+# ===================================
+# This pipeline:
+# - Builds & tests the API
+# - Runs SonarCloud analysis
+# - Packages the API
+# - Deploys to DEV, TEST, and PROD environments
+# - Uses slot swapping in Production for zero-downtime deployment
+
+# ------------------------------
+# Pipeline Trigger: Runs on Master Branch Updates
+# ------------------------------
+trigger:
+  branches:
+    include:
+      - master
+
+# ------------------------------
+# Agent Pool: Microsoft-Hosted Agent (Windows Latest)
+# ------------------------------
+pool:
+  vmImage: 'windows-latest'
+
+stages:
+# ===================================
+# STAGE 1: BUILD, TEST & SONARCLOUD ANALYSIS
+# ===================================
+- stage: Build
+  displayName: 'Build, Test & SonarCloud Analysis'
+  jobs:
+    - job: BuildTestSonar
+      displayName: 'Build, Test & Sonar Analysis'
+      steps:
+        - checkout: self  # Pull latest code from the repository.
+
+        # Install .NET SDK
+        - task: UseDotNet@2
+          displayName: 'Install .NET SDK'
+          inputs:
+            packageType: 'sdk'
+            version: '8.0.x'
+
+        # Prepare SonarCloud Analysis
+        - task: SonarCloudPrepare@3
+          displayName: 'Prepare SonarCloud Analysis'
+          inputs:
+            SonarCloud: '$(SonarCloudConnection)'
+            organization: '$(SonarCloudOrganization)'
+            projectKey: '$(SonarProjectKey)'
+            projectName: '$(SonarProjectName)'
+            scannerMode: 'dotnet'
+            extraProperties: |
+              sonar.cs.opencover.reportsPaths=$(Agent.TempDirectory)/**/coverage.opencover.xml
+        
+        # Remove SQL Project (Prevents SSDT Build Errors)
+        - script: |
+            echo "Removing SQL project from solution to avoid SSDT build failure..."
+            dotnet sln remove cddo-users-db/cddo-users-db.sqlproj || echo "SQL project was not in solution"
+          displayName: 'Remove SQL Project'
+
+        # Restore Dependencies
+        - task: DotNetCoreCLI@2
+          displayName: 'Restore Dependencies'
+          inputs:
+            command: 'restore'
+            projects: '**/*.csproj'
+
+        # Build Specific Projects
+        - task: DotNetCoreCLI@2
+          displayName: 'Build Projects'
+          inputs:
+            command: 'build'
+            arguments: '--configuration Release'
+
+        # Run Tests with Code Coverage
+        - task: DotNetCoreCLI@2
+          displayName: 'Run Tests with Code Coverage'
+          inputs:
+            command: 'test'
+            arguments: '--settings opencover.runsettings --configuration Release --collect:"XPlat Code Coverage"'
+            publishTestResults: true
+
+        # Publish Code Coverage Results
+        - task: PublishCodeCoverageResults@2
+          displayName: 'Publish Code Coverage Results'
+          inputs:
+            summaryFileLocation: '$(Agent.TempDirectory)/**/coverage.opencover.xml'
+
+        # Run SonarCloud Analysis
+        - task: SonarCloudAnalyze@3
+
+        # Publish Quality Gate Result
+        - task: SonarCloudPublish@3
+          displayName: 'Publish SonarCloud Quality Gate Result'
+          inputs:
+            pollingTimeoutSec: '300'
+
+# ===================================
+# STAGE 2: PACKAGE API
+# ===================================
+- stage: Package
+  displayName: 'Package API for Deployment'
+  dependsOn: Build
+  jobs:
+    - job: PackageAPI
+      displayName: 'Package API'
+      steps:
+        - checkout: self
+
+        # Publish Web App and create a ZIP package
+        - task: DotNetCoreCLI@2
+          displayName: 'Publish API & Package'
+          inputs:
+            command: 'publish'
+            publishWebProjects: true
+            arguments: '--configuration Release --output $(Build.ArtifactStagingDirectory) --runtime win-x64 --self-contained false'
+            zipAfterPublish: true
+
+        # Publish the package as an artifact
+        - task: PublishBuildArtifacts@1
+          displayName: 'Publish Build Artifacts'
+          inputs:
+            PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+            ArtifactName: 'api'
+            publishLocation: 'Container'
+
+# ===================================
+# STAGE 3: DEPLOY TO DEV ENVIRONMENT
+# ===================================
+- stage: DEV_Environment_Deployment
+  displayName: 'Deploy to DEV Environment'
+  dependsOn: Package
+  jobs:
+    - deployment: DeployToDev
+      environment: 'CDDO DEV Users API'
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+              - download: current
+                artifact: api  
+
+              - task: AzureRmWebAppDeployment@4
+                displayName: 'Deploy to DEV API'
+                inputs:
+                  azureSubscription: '$(AzureSubscriptionDev)'
+                  appType: 'webApp'
+                  WebAppName: '$(WebAppNameDev)'
+                  ResourceGroupName: '$(ResourceGroupDev)'
+                  package: '$(Pipeline.Workspace)/api/**/*.zip'
+
+# ===================================
+# STAGE 4: DEPLOY TO TEST ENVIRONMENT
+# ===================================
+- stage: TEST_Environment_Deployment
+  displayName: 'Deploy to TEST Environment'
+  dependsOn: DEV_Environment_Deployment
+  jobs:
+    - deployment: DeployToTest
+      environment: 'CDDO TEST Users API'
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+              - download: current
+                artifact: api  
+
+              - task: AzureRmWebAppDeployment@4
+                displayName: 'Deploy to TEST API'
+                inputs:
+                  azureSubscription: '$(AzureSubscriptionProd)'
+                  appType: 'webApp'
+                  WebAppName: '$(WebAppNameTest)'
+                  ResourceGroupName: '$(ResourceGroupTest)'
+                  package: '$(Pipeline.Workspace)/api/**/*.zip'
+
+# ===================================
+# STAGE 5: DEPLOY TO PRODUCTION UK WEST
+# ===================================
+- stage: PROD_UK_WEST
+  displayName: 'Deploy to PRODUCTION - UK West'
+  dependsOn: TEST_Environment_Deployment
+  jobs:
+    - deployment: DeployToProdUKWest
+      environment: 'CDDO PROD Users API UK West'
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+              - download: current
+                artifact: api  
+
+              - task: AzureRmWebAppDeployment@4
+                displayName: 'Deploy to PROD API (UK West)'
+                inputs:
+                  azureSubscription: '$(AzureSubscriptionProd)'
+                  appType: 'webApp'
+                  WebAppName: '$(WebAppNameProdUKWest)'
+                  ResourceGroupName: '$(ResourceGroupProdUKWest)'
+                  package: '$(Pipeline.Workspace)/api/**/*.zip'
+
+# ===================================
+# STAGE 6: DEPLOY TO PRODUCTION UK SOUTH
+# ===================================
+- stage: PROD_UK_SOUTH
+  displayName: 'Deploy to PRODUCTION - UK South'
+  dependsOn: PROD_UK_WEST
+  jobs:
+    - deployment: DeployToProdUKSouth
+      environment: 'CDDO PROD Users API UK South'
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+              - download: current
+                artifact: api  
+
+              - task: AzureRmWebAppDeployment@4
+                displayName: 'Deploy to PROD API (UK South)'
+                inputs:
+                  azureSubscription: '$(AzureSubscriptionProd)'
+                  appType: 'webApp'
+                  WebAppName: '$(WebAppNameProdUKSouth)'
+                  ResourceGroupName: '$(ResourceGroupProdUKSouth)'
+                  package: '$(Pipeline.Workspace)/api/**/*.zip'

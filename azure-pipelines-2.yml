@@ -1,0 +1,134 @@
+trigger:
+- none
+
+pool:
+  vmImage: 'windows-latest'
+
+variables:
+  PASSWORD_DEV: $(SQLPASSWORD_DEV)
+  PASSWORD_TEST: $(SQLPASSWORD_TEST)
+  PASSWORD_PROD: $(SQLPASSWORD_PROD)
+
+stages:
+
+# DEV Environment Deployment
+- stage: DEV_Environment_Deployment
+  displayName: 'Deploy Users DB to DEV Environment'
+  jobs:
+  - deployment: Deploy_To_Users_SQL_DB_DEV
+    environment: 'USERS SQL DB - DEV'  # Declaring the DEV environment
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+            - checkout: self  # Ensure code is checked out
+
+            - task: NuGetCommand@2
+              inputs:
+                restoreSolution: '**/Cddo-Users.sln'
+
+            - task: VSBuild@1
+              inputs:
+                solution: '**/Cddo-Users.sln'
+                platform: 'Any CPU'
+                configuration: 'Release'
+
+            # This script step is optional, used for diagnostics
+            - script: dir $(System.DefaultWorkingDirectory)
+              displayName: 'List DACPAC directory'
+
+            - task: SqlAzureDacpacDeployment@1
+              inputs:
+                azureSubscription: 'CDDO Dev Deployment'
+                AuthenticationType: 'server'
+                ServerName: 'sql-cddo-dev-001.database.windows.net'
+                DatabaseName: 'cddo-users'
+                SqlUsername: 'sqladmin'
+                SqlPassword: '$(PASSWORD_DEV)'
+                deployType: 'DacpacTask'
+                DeploymentAction: 'Publish'
+                DacpacFile: '$(System.DefaultWorkingDirectory)/cddo-users-db/bin/Release/cddo-users-db.dacpac'
+                IpDetectionMethod: 'AutoDetect'
+
+
+# TEST Environment Deployment
+- stage: TEST_Environment_Deployment
+  displayName: 'Deploy Users DB to TEST Environment'
+  dependsOn: DEV_Environment_Deployment
+  condition: succeeded()
+  jobs:
+  - deployment: Deploy_To_Users_SQL_DB_TEST
+    environment: 'USERS SQL DB - TEST'  # Declaring the TEST environment
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+            - checkout: self  # Ensure code is checked out
+
+            - task: NuGetCommand@2
+              inputs:
+                restoreSolution: '**/Cddo-Users.sln'
+
+            - task: VSBuild@1
+              inputs:
+                solution: '**/Cddo-Users.sln'
+                platform: 'Any CPU'
+                configuration: 'Release'
+
+            # This script step is optional, used for diagnostics
+            - script: dir $(System.DefaultWorkingDirectory)
+              displayName: 'List DACPAC directory'
+
+            - task: SqlAzureDacpacDeployment@1
+              inputs:
+                azureSubscription: 'CDDO Dev Deployment'
+                AuthenticationType: 'server'
+                ServerName: 'sql-cddo-test-001.database.windows.net'
+                DatabaseName: 'cddo-users'
+                SqlUsername: 'sqladmin'
+                SqlPassword: '$(PASSWORD_TEST)'
+                deployType: 'DacpacTask'
+                DeploymentAction: 'Publish'
+                DacpacFile: '$(System.DefaultWorkingDirectory)/cddo-users-db/bin/Release/cddo-users-db.dacpac'
+                IpDetectionMethod: 'AutoDetect'
+
+# PRODUCTION Environment Deployment
+- stage: PROD_Environment_Deployment
+  displayName: 'Deploy Users DB to PROD Environment'
+  dependsOn: TEST_Environment_Deployment
+  condition: succeeded()
+  jobs:
+  - deployment: Deploy_To_Users_SQL_DB_PROD
+    environment: 'USERS SQL DB - PROD'  # Declaring the PROD environment
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+            - checkout: self  # Ensure code is checked out
+
+            - task: NuGetCommand@2
+              inputs:
+                restoreSolution: '**/Cddo-Users.sln'
+
+            - task: VSBuild@1
+              inputs:
+                solution: '**/Cddo-Users.sln'
+                platform: 'Any CPU'
+                configuration: 'Release'
+
+            # This script step is optional, used for diagnostics
+            - script: dir $(System.DefaultWorkingDirectory)
+              displayName: 'List DACPAC directory'
+
+            - task: SqlAzureDacpacDeployment@1
+              inputs:
+                azureSubscription: 'CDDO Prod Deployment'
+                AuthenticationType: 'server'
+                ServerName: 'sql-cddo-prod-001.database.windows.net'
+                DatabaseName: 'cddo-users'
+                SqlUsername: 'sqladmin'
+                SqlPassword: '$(PASSWORD_PROD)'
+                deployType: 'DacpacTask'
+                DeploymentAction: 'Publish'
+                DacpacFile: '$(System.DefaultWorkingDirectory)/cddo-users-db/bin/Release/cddo-users-db.dacpac'
+                IpDetectionMethod: 'AutoDetect'
