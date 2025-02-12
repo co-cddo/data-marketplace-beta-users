@@ -1,0 +1,6 @@
+@cddo_users_HostAddress = http://localhost:5032
+
+GET {{cddo_users_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
