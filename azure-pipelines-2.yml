@@ -112,7 +112,7 @@ stages:
               - task: SqlAzureDacpacDeployment@1
                 displayName: 'Deploy Database to TEST'
                 inputs:
-                  azureSubscription: '$(AzureSubscriptionProd)'
+                  azureSubscription: '$(AzureSubscriptionDev)'
                   AuthenticationType: 'server'
                   ServerName: '$(SQLServerTest)'
                   DatabaseName: '$(DatabaseName)'
