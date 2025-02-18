@@ -722,55 +722,45 @@ namespace cddo_users.Repositories
         public async Task<IEnumerable<UserAdminDto>> GetAllUsersByRoleTypeAsync(string roleType)
         {
             var query = @"
-                    SELECT DISTINCT
-                        u.UserID, u.Email, u.LastLogin, u.TwoFactorEnabled, u.EmailNotification,
-                        u.WelcomeNotification, u.OrganisationID, o.OrganisationName, u.DomainID, 
-                        u.UserName, u.Visible,
-                        STUFF((SELECT ', ' + r.RoleName 
-                               FROM UserRoles ur
-                               JOIN Roles r ON ur.RoleID = r.RoleID
-                               WHERE ur.UserID = u.UserID
-                               AND r.Visible = 1
-                               FOR XML PATH('')), 1, 2, '') AS Roles
-                    FROM 
-                        Users u
-                    LEFT JOIN 
-                        Organisations o ON u.OrganisationID = o.OrganisationID
-                    JOIN 
-                        UserRoles ur ON u.UserID = ur.UserID
-                    JOIN 
-                        Roles r ON ur.RoleID = r.RoleID
-                    WHERE 
-                        r.RoleName = @RoleType
-                        AND u.Visible = 1;  -- assuming you only want visible users
-                    "
-            ;
+        SELECT DISTINCT
+            u.UserID, u.Email, u.LastLogin, u.TwoFactorEnabled, u.EmailNotification,
+            u.WelcomeNotification, u.OrganisationID, o.OrganisationName, u.DomainID, 
+            u.UserName, u.Visible,
+            STUFF((SELECT ', ' + r.RoleName 
+                   FROM UserRoles ur
+                   JOIN Roles r ON ur.RoleID = r.RoleID
+                   WHERE ur.UserID = u.UserID
+                   AND r.Visible = 1
+                   FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '') AS RolesList
+        FROM 
+            Users u
+        LEFT JOIN 
+            Organisations o ON u.OrganisationID = o.OrganisationID
+        JOIN 
+            UserRoles ur ON u.UserID = ur.UserID
+        JOIN 
+            Roles r ON ur.RoleID = r.RoleID
+        WHERE 
+            r.RoleName = @RoleType
+            AND u.Visible = 1;
+    ";
 
             using (var connection = new SqlConnection(_connectionString))
             {
                 var parameters = new { RoleType = roleType };
 
-                var users = (await connection.QueryAsync<UserAdminDto>(query, parameters)).Select(user => new UserAdminDto
-                {
-                    UserId = user.UserId,
-                    Email = user.Email,
-                    LastLogin = user.LastLogin,
-                    TwoFactorEnabled = user.TwoFactorEnabled,
-                    EmailNotification = user.EmailNotification,
-                    WelcomeNotification = user.WelcomeNotification,
-                    OrganisationID = user.OrganisationID,
-                    OrganisationName = user.OrganisationName,
-                    DomainID = user.DomainID,
-                    UserName = user.UserName,
-                    Visible = user.Visible,
-                    Roles = !string.IsNullOrEmpty(user.RolesList)
-                        ? user.RolesList.Split(new[] { ", " }, StringSplitOptions.None)
-                                    .Select(roleName => new DTOs.Role { RoleName = roleName })
-                                    .ToList()
-                        : new List<DTOs.Role>()
-                }).ToList();
+                var userRecords = await connection.QueryAsync<UserAdminDto>(query, parameters);
 
-                return users;
+                foreach (var user in userRecords)
+                {
+                    user.Roles = !string.IsNullOrEmpty(user.RolesList)
+                        ? user.RolesList.Split(new[] { ", " }, StringSplitOptions.RemoveEmptyEntries)
+                                        .Select(roleName => new Role { RoleName = roleName })
+                                        .ToList()
+                        : new List<Role>();
+                }
+
+                return userRecords;
             }
         }
 
