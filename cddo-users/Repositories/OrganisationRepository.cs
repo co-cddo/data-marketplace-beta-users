@@ -129,16 +129,15 @@ namespace cddo_users.Repositories
             ModifiedBy = @ModifiedBy,
             Allowed = @Allowed
         WHERE 
-            OrganisationId = @OrganisationId";
+            OrganisationID = @OrganisationId";
 
             var updateDomainQuery = @"
             UPDATE Domains 
-            SET DomainName = @DomainName, 
-                OrganisationType = @OrganisationType, 
+            SET OrganisationType = @OrganisationType, 
                 OrganisationFormat = @OrganisationFormat,
                 AllowList = @AllowList
             WHERE 
-            OrganisationId = @OrganisationId;";
+            OrganisationID = @OrganisationId;";
 
             using (var connection = new SqlConnection(_connectionString))
             {
@@ -179,7 +178,6 @@ namespace cddo_users.Repositories
                             var allowList = (bool)!organisationDetail.Allowed ? false : domain.AllowList;
                             await connection.ExecuteAsync(updateDomainQuery, new
                             {
-                                domain.DomainName,
                                 OrganisationID = organisationDetail.OrganisationId,
                                 OrganisationType,
                                 domain.OrganisationFormat,
