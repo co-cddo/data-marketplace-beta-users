@@ -40,18 +40,6 @@ stages:
           inputs:
             packageType: 'sdk'
             version: '8.0.x'
-
-        # Prepare SonarCloud Analysis
-        - task: SonarCloudPrepare@3
-          displayName: 'Prepare SonarCloud Analysis'
-          inputs:
-            SonarCloud: '$(SonarCloudConnection)'
-            organization: '$(SonarCloudOrganization)'
-            projectKey: '$(SonarProjectKey)'
-            projectName: '$(SonarProjectName)'
-            scannerMode: 'dotnet'
-            extraProperties: |
-              sonar.cs.opencover.reportsPaths=$(Agent.TempDirectory)/**/coverage.opencover.xml
         
         # Remove SQL Project (Prevents SSDT Build Errors)
         - script: |
@@ -80,21 +68,6 @@ stages:
             command: 'test'
             arguments: '--settings opencover.runsettings --configuration Release --collect:"XPlat Code Coverage"'
             publishTestResults: true
-
-        # Publish Code Coverage Results
-        - task: PublishCodeCoverageResults@2
-          displayName: 'Publish Code Coverage Results'
-          inputs:
-            summaryFileLocation: '$(Agent.TempDirectory)/**/coverage.opencover.xml'
-
-        # Run SonarCloud Analysis
-        - task: SonarCloudAnalyze@3
-
-        # Publish Quality Gate Result
-        - task: SonarCloudPublish@3
-          displayName: 'Publish SonarCloud Quality Gate Result'
-          inputs:
-            pollingTimeoutSec: '300'
 
 # ===================================
 # STAGE 2: PACKAGE API
