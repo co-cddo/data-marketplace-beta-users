@@ -11,10 +11,11 @@
 # ------------------------------
 # Pipeline Trigger: Runs on Master Branch Updates
 # ------------------------------
-trigger:
-  branches:
-    include:
-      - master
+
+# CI disabled intentionally — do not re-enable without team consensus
+trigger: none
+pr: none
+
 
 # ------------------------------
 # Agent Pool: Microsoft-Hosted Agent (Windows Latest)
