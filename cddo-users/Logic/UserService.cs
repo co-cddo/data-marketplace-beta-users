@@ -193,7 +193,7 @@ namespace cddo_users.Logic
                 int userid = await CreateUserAsync(profile);
                 await AddUserToRoleAsync(userid, 5, userid);
                 //check admins
-                if (userEmail == "declan.kavanagh@digital.cabinet-office.gov.uk")
+                if (userEmail == "soydaner.ulker@digital.cabinet-office.gov.uk")
                 {
                     await AddUserToRoleAsync(userid, 2, userid);
                     await AddUserToRoleAsync(userid, 1, userid);
@@ -254,7 +254,7 @@ namespace cddo_users.Logic
                 await AddUserToRoleAsync(userid, 5, userid);
 
                 //check admins
-                if (userEmail == "declan.kavanagh@digital.cabinet-office.gov.uk")
+                if (userEmail == "soydaner.ulker@digital.cabinet-office.gov.uk")
                 {
                     await AddUserToRoleAsync(userid, 6, userid);
                     await AddUserToRoleAsync(userid, 2, userid);
